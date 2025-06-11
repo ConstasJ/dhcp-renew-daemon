@@ -189,16 +189,10 @@ class IPv6RenewalService(
             return@withContext "Tailscale 未安装，跳过重启"
         }
 
-        val commands = when (platform) {
-            "windows" -> listOf(
-                listOf("tailscale", "down"),
-                listOf("tailscale", "up")
-            )
-            "linux" -> listOf(
-                listOf("sudo", "systemctl", "restart", "tailscaled")
-            )
-            else -> emptyList()
-        }
+        val commands = listOf(
+            listOf("tailscale", "down"),
+            listOf("tailscale", "up")
+        )
 
         val results = mutableListOf<String>()
 
