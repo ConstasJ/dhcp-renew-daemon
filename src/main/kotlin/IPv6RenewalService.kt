@@ -77,7 +77,7 @@ class IPv6RenewalService(
                         else -> {
                             // 尝试检测系统默认编码
                             val systemCharset = System.getProperty("sun.jnu.encoding") 
-                                ?: System.getProperty("file.encoding")
+                                ?: Charset.defaultCharset().displayName()
                                 ?: "GBK"
                             logger.debug("使用系统编码: $systemCharset")
                             Charset.forName(systemCharset)
