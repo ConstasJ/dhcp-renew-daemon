@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.kotlin.jvm)
     alias(libs.plugins.kotlinx.serialization)
+    alias(libs.plugins.shadow)
     application
 }
 
@@ -23,6 +24,17 @@ dependencies {
 java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+tasks {
+    jar {
+        manifest {
+            attributes["Main-Class"] = "io.github.constasj.dhcp.AppKt"
+        }
+    }
+    shadowJar {
+        archiveClassifier.set("")
     }
 }
 

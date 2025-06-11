@@ -63,12 +63,25 @@ class IPv6RenewalService(
                     val output = InputStreamReader(process.inputStream, Charset.forName("GBK")).readText()
                     process.waitFor(5, TimeUnit.SECONDS)
                     
-                    // 从输出中提取代码页，例如 "Active code page: 936"
-                    val codePage = output.substringAfter("Active code page: ").trim().toIntOrNull()
+                    // 从输出中提取代码页
+                    val codePageRegex = """(\d+)""".toRegex()
+                    val matchResult = codePageRegex.find(output)
+                    val codePage = matchResult?.value?.toIntOrNull()
+                    
+                    logger.debug("检测到代码页: $codePage")
+                    
                     when (codePage) {
                         936 -> Charset.forName("GBK")
                         65001 -> Charset.forName("UTF-8")
-                        else -> Charset.forName("GBK") // 默认使用GBK
+                        950 -> Charset.forName("Big5")
+                        else -> {
+                            // 尝试检测系统默认编码
+                            val systemCharset = System.getProperty("sun.jnu.encoding") 
+                                ?: System.getProperty("file.encoding")
+                                ?: "GBK"
+                            logger.debug("使用系统编码: $systemCharset")
+                            Charset.forName(systemCharset)
+                        }
                     }
                 } catch (e: Exception) {
                     logger.debug("无法检测控制台编码，使用默认GBK: ${e.message}")
@@ -88,15 +101,28 @@ class IPv6RenewalService(
                 .redirectErrorStream(true)
                 .start()
 
-            val charset = getConsoleCharset()
-            val output = InputStreamReader(process.inputStream, charset).readText()
-            val success = process.waitFor(30, TimeUnit.SECONDS) && process.exitValue() == 0
-
-            Pair(success, output.trim())
-        } catch (e: Exception) {
-            Pair(false, e.message ?: "执行命令时发生未知错误")
+        val charset = getConsoleCharset()
+        
+        // 使用BufferedReader逐行读取，避免编码问题
+        val output = StringBuilder()
+        InputStreamReader(process.inputStream, charset).buffered().use { reader ->
+            reader.forEachLine { line ->
+                output.append(line).append("\n")
+            }
         }
+        
+        val success = process.waitFor(30, TimeUnit.SECONDS) && process.exitValue() == 0
+        
+        logger.debug("命令执行: ${command.joinToString(" ")}")
+        logger.debug("使用编码: ${charset.name()}")
+        logger.debug("输出: ${output.toString().trim()}")
+
+        Pair(success, output.toString().trim())
+    } catch (e: Exception) {
+        logger.error("执行命令时发生错误", e)
+        Pair(false, e.message ?: "执行命令时发生未知错误")
     }
+}
 
     private fun isTailscaleInstalled(): Boolean {
         return try {
