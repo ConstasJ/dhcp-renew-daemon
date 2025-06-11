@@ -3,7 +3,7 @@ package io.github.constasj.dhcp
 import org.slf4j.LoggerFactory
 
 fun main() {
-    val port = System.getenv("PORT")?.toIntOrNull() ?: 8080
+    val port = System.getenv("PORT")?.toIntOrNull() ?: 37080
     
     val logger = LoggerFactory.getLogger("App")
 
