@@ -14,6 +14,8 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.*
 import org.slf4j.Logger
+import java.io.InputStreamReader
+import java.nio.charset.Charset
 import java.util.concurrent.TimeUnit
 
 @Serializable
@@ -48,6 +50,53 @@ class IPv6RenewalService(
 
     private val linuxInterfaceName = System.getenv("LINUX_INTERFACE_NAME")
         ?: "eth0"
+
+    /**
+     * 获取Windows控制台输出的正确编码
+     */
+    private fun getConsoleCharset(): Charset {
+        return when (platform) {
+            "windows" -> {
+                try {
+                    // 尝试获取Windows控制台代码页
+                    val process = ProcessBuilder("chcp").start()
+                    val output = InputStreamReader(process.inputStream, Charset.forName("GBK")).readText()
+                    process.waitFor(5, TimeUnit.SECONDS)
+                    
+                    // 从输出中提取代码页，例如 "Active code page: 936"
+                    val codePage = output.substringAfter("Active code page: ").trim().toIntOrNull()
+                    when (codePage) {
+                        936 -> Charset.forName("GBK")
+                        65001 -> Charset.forName("UTF-8")
+                        else -> Charset.forName("GBK") // 默认使用GBK
+                    }
+                } catch (e: Exception) {
+                    logger.debug("无法检测控制台编码，使用默认GBK: ${e.message}")
+                    Charset.forName("GBK")
+                }
+            }
+            else -> Charset.forName("UTF-8")
+        }
+    }
+
+    /**
+     * 执行系统命令并正确处理编码
+     */
+    private suspend fun executeCommand(command: List<String>): Pair<Boolean, String> = withContext(Dispatchers.IO) {
+        try {
+            val process = ProcessBuilder(command)
+                .redirectErrorStream(true)
+                .start()
+
+            val charset = getConsoleCharset()
+            val output = InputStreamReader(process.inputStream, charset).readText()
+            val success = process.waitFor(30, TimeUnit.SECONDS) && process.exitValue() == 0
+
+            Pair(success, output.trim())
+        } catch (e: Exception) {
+            Pair(false, e.message ?: "执行命令时发生未知错误")
+        }
+    }
 
     private fun isTailscaleInstalled(): Boolean {
         return try {
@@ -93,25 +142,17 @@ class IPv6RenewalService(
         val results = mutableListOf<String>()
 
         for (command in commands) {
-            try {
-                val process = ProcessBuilder(command)
-                    .redirectErrorStream(true)
-                    .start()
-
-                val output = process.inputStream.bufferedReader().readText()
-                val success = process.waitFor(30, TimeUnit.SECONDS) && process.exitValue() == 0
-
-                if (success) {
-                    results.add("✓ ${command.joinToString(" ")}")
-                    if (platform == "linux" && command.contains("networkctl")) {
-                        // 如果 networkctl 成功，跳过后续的 dhclient 命令
-                        break
-                    }
-                } else {
-                    results.add("✗ ${command.joinToString(" ")}: $output")
+            val (success, output) = executeCommand(command)
+            
+            if (success) {
+                results.add("✓ ${command.joinToString(" ")}")
+                if (platform == "linux" && command.contains("networkctl")) {
+                    // 如果 networkctl 成功，跳过后续的 dhclient 命令
+                    break
                 }
-            } catch (e: Exception) {
-                results.add("✗ ${command.joinToString(" ")}: ${e.message}")
+            } else {
+                val errorMsg = output.ifEmpty { "命令执行失败" }
+                results.add("✗ ${command.joinToString(" ")}: $errorMsg")
             }
         }
 
@@ -125,8 +166,8 @@ class IPv6RenewalService(
 
         val commands = when (platform) {
             "windows" -> listOf(
-                listOf("net", "stop", "Tailscale"),
-                listOf("net", "start", "Tailscale")
+                listOf("tailscale", "down"),
+                listOf("tailscale", "up")
             )
             "linux" -> listOf(
                 listOf("sudo", "systemctl", "restart", "tailscaled")
@@ -137,21 +178,13 @@ class IPv6RenewalService(
         val results = mutableListOf<String>()
 
         for (command in commands) {
-            try {
-                val process = ProcessBuilder(command)
-                    .redirectErrorStream(true)
-                    .start()
-
-                val output = process.inputStream.bufferedReader().readText()
-                val success = process.waitFor(15, TimeUnit.SECONDS) && process.exitValue() == 0
-
-                if (success) {
-                    results.add("✓ Tailscale: ${command.joinToString(" ")}")
-                } else {
-                    results.add("✗ Tailscale: ${command.joinToString(" ")}: $output")
-                }
-            } catch (e: Exception) {
-                results.add("✗ Tailscale: ${command.joinToString(" ")}: ${e.message}")
+            val (success, output) = executeCommand(command)
+            
+            if (success) {
+                results.add("✓ Tailscale: ${command.joinToString(" ")}")
+            } else {
+                val errorMsg = output.ifEmpty { "命令执行失败" }
+                results.add("✗ Tailscale: ${command.joinToString(" ")}: $errorMsg")
             }
         }
 
