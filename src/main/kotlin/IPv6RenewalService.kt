@@ -156,7 +156,6 @@ class IPv6RenewalService(
             )
             "linux" -> listOf(
                 // 使用 networkctl 重新配置接口 (systemd-networkd)
-                listOf("sudo", "networkctl", "reload"),
                 listOf("sudo", "networkctl", "reconfigure", linuxInterfaceName),
                 // 备用方案：如果上面失败，尝试传统方法
                 listOf("sudo", "dhclient", "-6", "-r"),
