@@ -237,7 +237,7 @@ class IPv6RenewalService(
 
                 get("/status") {
                     call.respond(
-                        StatusResponse(platform, isTailscaleInstalled(), "Tailscale")
+                        StatusResponse(platform, isTailscaleInstalled(), "running")
                     )
                 }
 
