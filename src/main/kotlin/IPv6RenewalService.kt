@@ -11,7 +11,7 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.Serializable
+import kotlinx.serialization.*
 import kotlinx.serialization.json.*
 import org.slf4j.Logger
 import java.io.InputStreamReader
@@ -29,6 +29,14 @@ data class RenewResponse(
     val success: Boolean,
     val message: String,
     val platform: String
+)
+
+@Serializable
+data class StatusResponse(
+    val platform: String,
+    @SerialName("tailscale_installed")
+    val tailscaleInstalled: Boolean,
+    val service: String
 )
 
 class IPv6RenewalService(
@@ -229,11 +237,7 @@ class IPv6RenewalService(
 
                 get("/status") {
                     call.respond(
-                        mapOf(
-                            "platform" to platform,
-                            "tailscale_installed" to isTailscaleInstalled(),
-                            "service" to "running"
-                        )
+                        StatusResponse(platform, isTailscaleInstalled(), "Tailscale")
                     )
                 }
 
