@@ -157,14 +157,17 @@ class DHCPRenewalService(
         val commands = when (platform) {
             "windows" -> listOf(
                 // Using ipconfig command to renew the lease
+                listOf("ipconfig", "/release"),
+                listOf("ipconfig", "/release6"),
+                listOf("ipconfig", "/renew"),
                 listOf("ipconfig", "/renew6")
             )
             "linux" -> listOf(
                 // Using networkctl(systemd-networkd) to renew the DHCP lease
                 listOf("networkctl", "reconfigure", linuxInterfaceName),
                 // Backup plan: if commands above failed, then rollback to dhclient
-                listOf("dhclient", "-6", "-r"),
-                listOf("dhclient", "-6")
+                listOf("dhclient", "-4o6", "-r"),
+                listOf("dhclient", "-4o6")
             )
             else -> emptyList()
         }
