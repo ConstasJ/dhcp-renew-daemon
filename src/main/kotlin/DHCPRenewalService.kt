@@ -39,10 +39,10 @@ data class StatusResponse(
     val service: String
 )
 
-class IPv6RenewalService(
+class DHCPRenewalService(
     private val logger: Logger
 ) {
-    private val secret = System.getenv("IPV6_RENEWAL_SECRET")
+    private val secret = System.getenv("DHCP_RENEWAL_SECRET")
         ?: "DEFAULT_SECRET_CHANGE_ME"
 
     private val platform = detectPlatform()
@@ -60,39 +60,36 @@ class IPv6RenewalService(
         ?: "eth0"
 
     /**
-     * 获取Windows控制台输出的正确编码
+     * Get console charset, especially for Windows
      */
     private fun getConsoleCharset(): Charset {
         return when (platform) {
             "windows" -> {
                 try {
-                    // 尝试获取Windows控制台代码页
                     val process = ProcessBuilder("chcp").start()
                     val output = InputStreamReader(process.inputStream, Charset.forName("GBK")).readText()
                     process.waitFor(5, TimeUnit.SECONDS)
-                    
-                    // 从输出中提取代码页
+
                     val codePageRegex = """(\d+)""".toRegex()
                     val matchResult = codePageRegex.find(output)
                     val codePage = matchResult?.value?.toIntOrNull()
                     
-                    logger.debug("检测到代码页: $codePage")
+                    logger.debug("Detected codepage: $codePage")
                     
                     when (codePage) {
                         936 -> Charset.forName("GBK")
                         65001 -> Charset.forName("UTF-8")
                         950 -> Charset.forName("Big5")
                         else -> {
-                            // 尝试检测系统默认编码
                             val systemCharset = System.getProperty("sun.jnu.encoding") 
                                 ?: Charset.defaultCharset().displayName()
                                 ?: "GBK"
-                            logger.debug("使用系统编码: $systemCharset")
+                            logger.debug("Using system charset: $systemCharset")
                             Charset.forName(systemCharset)
                         }
                     }
                 } catch (e: Exception) {
-                    logger.debug("无法检测控制台编码，使用默认GBK: ${e.message}")
+                    logger.debug("Cannot detect shell default charset, using GBK: ${e.message}")
                     Charset.forName("GBK")
                 }
             }
@@ -101,7 +98,7 @@ class IPv6RenewalService(
     }
 
     /**
-     * 执行系统命令并正确处理编码
+     * Execute system commands with the correct charset
      */
     private suspend fun executeCommand(command: List<String>): Pair<Boolean, String> = withContext(Dispatchers.IO) {
         try {
@@ -110,8 +107,7 @@ class IPv6RenewalService(
                 .start()
 
         val charset = getConsoleCharset()
-        
-        // 使用BufferedReader逐行读取，避免编码问题
+
         val output = StringBuilder()
         InputStreamReader(process.inputStream, charset).buffered().use { reader ->
             reader.forEachLine { line ->
@@ -121,14 +117,14 @@ class IPv6RenewalService(
         
         val success = process.waitFor(30, TimeUnit.SECONDS) && process.exitValue() == 0
         
-        logger.debug("命令执行: ${command.joinToString(" ")}")
-        logger.debug("使用编码: ${charset.name()}")
-        logger.debug("输出: ${output.toString().trim()}")
+        logger.debug("Executed commands: ${command.joinToString(" ")}")
+        logger.debug("Charset: ${charset.name()}")
+        logger.debug("Output: ${output.toString().trim()}")
 
         Pair(success, output.toString().trim())
     } catch (e: Exception) {
-        logger.error("执行命令时发生错误", e)
-        Pair(false, e.message ?: "执行命令时发生未知错误")
+        logger.error("Error on executing commands", e)
+        Pair(false, e.message ?: "Unknown error on executing commands")
     }
 }
 
@@ -136,14 +132,14 @@ class IPv6RenewalService(
         return try {
             when (platform) {
                 "windows" -> {
-                    // 检查 Tailscale 服务是否存在
+                    // Check if the Tailscale service exists
                     val process = ProcessBuilder("sc", "query", "Tailscale")
                         .start()
                     process.waitFor(5, TimeUnit.SECONDS)
                     process.exitValue() == 0
                 }
                 "linux" -> {
-                    // 检查 tailscale 命令是否存在
+                    // Check if the tailscale command exists
                     val process = ProcessBuilder("which", "tailscale")
                         .start()
                     process.waitFor(5, TimeUnit.SECONDS)
@@ -157,15 +153,16 @@ class IPv6RenewalService(
         }
     }
 
-    private suspend fun renewIPv6(): String = withContext(Dispatchers.IO) {
+    private suspend fun renewDHCP(): String = withContext(Dispatchers.IO) {
         val commands = when (platform) {
             "windows" -> listOf(
+                // Using ipconfig command to renew the lease
                 listOf("ipconfig", "/renew6")
             )
             "linux" -> listOf(
-                // 使用 networkctl 重新配置接口 (systemd-networkd)
+                // Using networkctl(systemd-networkd) to renew the DHCP lease
                 listOf("networkctl", "reconfigure", linuxInterfaceName),
-                // 备用方案：如果上面失败，尝试传统方法
+                // Backup plan: if commands above failed, then rollback to dhclient
                 listOf("dhclient", "-6", "-r"),
                 listOf("dhclient", "-6")
             )
@@ -180,11 +177,11 @@ class IPv6RenewalService(
             if (success) {
                 results.add("✓ ${command.joinToString(" ")}")
                 if (platform == "linux" && command.contains("networkctl")) {
-                    // 如果 networkctl 成功，跳过后续的 dhclient 命令
+                    // if networkctl executed successfully, then skip dhclient commands
                     break
                 }
             } else {
-                val errorMsg = output.ifEmpty { "命令执行失败" }
+                val errorMsg = output.ifEmpty { "Command execution failed" }
                 results.add("✗ ${command.joinToString(" ")}: $errorMsg")
             }
         }
@@ -194,7 +191,7 @@ class IPv6RenewalService(
 
     private suspend fun restartTailscale(): String = withContext(Dispatchers.IO) {
         if (!isTailscaleInstalled()) {
-            return@withContext "Tailscale 未安装，跳过重启"
+            return@withContext "Tailscale is not installed, skipping restart"
         }
 
         val commands = listOf(
@@ -210,7 +207,7 @@ class IPv6RenewalService(
             if (success) {
                 results.add("✓ Tailscale: ${command.joinToString(" ")}")
             } else {
-                val errorMsg = output.ifEmpty { "命令执行失败" }
+                val errorMsg = output.ifEmpty { "Command execution failed" }
                 results.add("✗ Tailscale: ${command.joinToString(" ")}: $errorMsg")
             }
         }
@@ -230,8 +227,8 @@ class IPv6RenewalService(
             routing {
                 get("/") {
                     call.respondText(
-                        "IPv6 Renewal Service - Platform: $platform\n" +
-                                "使用 POST /renew 来触发IPv6地址刷新"
+                        "DHCP Renewal Service - Platform: $platform\n" +
+                                "Using POST /renew to trigger DHCP lease renewal"
                     )
                 }
 
@@ -253,28 +250,28 @@ class IPv6RenewalService(
                             return@post
                         }
 
-                        logger.info("收到IPv6地址刷新请求 - Platform: $platform")
+                        logger.info("Received DHCP renewal request - Platform: $platform")
 
-                        val ipv6Result = renewIPv6()
+                        val dhcpResult = renewDHCP()
                         val tailscaleResult = if (isTailscaleInstalled()) {
                             restartTailscale()
                         } else {
-                            "Tailscale 未安装"
+                            "Tailscale not installed"
                         }
 
-                        val message = "IPv6刷新结果:\n$ipv6Result\n\nTailscale处理:\n$tailscaleResult"
+                        val message = "DHCP Renewal Result:\n$dhcpResult\n\nTailscale processing result:\n$tailscaleResult"
 
-                        logger.info("执行结果:\n$message")
+                        logger.info("Execution result:\n$message")
 
                         call.respond(
                             RenewResponse(true, message, platform)
                         )
 
                     } catch (e: Exception) {
-                        logger.info("处理请求时出错: ${e.message}")
+                        logger.info("Error on processing request: ${e.message}")
                         call.respond(
                             HttpStatusCode.InternalServerError,
-                            RenewResponse(false, "处理请求时出错: ${e.message}", platform)
+                            RenewResponse(false, "Error on processing request: ${e.message}", platform)
                         )
                     }
                 }

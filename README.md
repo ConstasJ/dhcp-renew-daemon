@@ -4,7 +4,7 @@ A lightweight service that listens for HTTP requests to renew DHCP leases and re
 
 ## Features
 
-- HTTP API for triggering IPv6 address renewal
+- HTTP API for triggering DHCP lease renewal
 - Platform-specific implementation for Windows and Linux
 - Automatic detection and restart of Tailscale service
 - Secure API with secret key authentication
@@ -16,14 +16,14 @@ A lightweight service that listens for HTTP requests to renew DHCP leases and re
 - Java 21 or higher
 - Windows or Linux operating system
 - Administrative privileges (for running network commands)
-- Tailscale (optional)
 
 ## Installation
 
 ### Option 1: Download the pre-built JAR
 
 1. Download the latest release from the [Releases](https://github.com/constasj/dhcp-renew-daemon/releases) page
-2. Run the JAR file with Java:
+2. Configure environment variables
+3. Run the JAR file with Java:
    ```
    java -jar dhcp-renew-daemon.jar
    ```
@@ -41,7 +41,9 @@ A lightweight service that listens for HTTP requests to renew DHCP leases and re
    ./gradlew shadowJar
    ```
 
-3. Run the application:
+3. Configure the application with environment variables.
+
+4. Run the application:
    ```
    java -jar build/libs/dhcp-renew-daemon.jar
    ```
@@ -50,10 +52,10 @@ A lightweight service that listens for HTTP requests to renew DHCP leases and re
 
 The daemon can be configured using environment variables:
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `PORT` | The HTTP port to listen on | 37080 |
-| `IPV6_RENEWAL_SECRET` | Secret key for API authentication | "DEFAULT_SECRET_CHANGE_ME" |
+| Variable               | Description | Default |
+|------------------------|-------------|---------|
+| `PORT`                 | The HTTP port to listen on | 37080 |
+| `DHCP_RENEWAL_SECRET`  | Secret key for API authentication | "DEFAULT_SECRET_CHANGE_ME" |
 | `LINUX_INTERFACE_NAME` | Network interface name (Linux only) | "eth0" |
 
 ## Usage
@@ -70,7 +72,7 @@ Returns the current status of the service, including platform and Tailscale inst
 
 #### POST /renew
 
-Triggers the IPv6 address renewal process and optionally restarts Tailscale.
+Triggers the DHCP lease renewal process and optionally restarts Tailscale.
 
 Request body:
 ```json
@@ -84,7 +86,7 @@ Response:
 ```json
 {
   "success": true,
-  "message": "IPv6 renewal results...",
+  "message": "DHCP renewal results...",
   "platform": "windows|linux"
 }
 ```
@@ -99,7 +101,7 @@ curl -X POST http://localhost:37080/renew \
 
 ## Security Considerations
 
-- Always change the default secret key by setting the `IPV6_RENEWAL_SECRET` environment variable
+- Always change the default secret key by setting the `DHCP_RENEWAL_SECRET` environment variable
 - Consider running the service behind a reverse proxy with HTTPS for production use or just use in a local network
 - The service requires administrative privileges to execute network commands
 

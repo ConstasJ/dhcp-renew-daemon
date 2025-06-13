@@ -7,10 +7,10 @@ fun main() {
     
     val logger = LoggerFactory.getLogger("App")
 
-    logger.info("启动 IPv6 地址刷新服务...")
-    logger.info("平台: ${System.getProperty("os.name")}")
-    logger.info("监听端口: $port")
-    logger.info("请设置环境变量 IPV6_RENEWAL_SECRET 来配置密钥")
+    logger.info("Launch DHCP Renewal Service...")
+    logger.info("Platform: ${System.getProperty("os.name")}")
+    logger.info("Listening on port $port")
+    logger.info("Please configure environment variable `DHCP_RENEWAL_SECRET` to set a secret")
 
-    IPv6RenewalService(logger).start(port)
+    DHCPRenewalService(logger).start(port)
 }
