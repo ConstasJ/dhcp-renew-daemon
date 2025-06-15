@@ -28,12 +28,10 @@ java {
 }
 
 tasks {
-    jar {
+    shadowJar {
         manifest {
             attributes["Main-Class"] = "io.github.constasj.dhcp.AppKt"
         }
-    }
-    shadowJar {
         archiveClassifier.set("")
     }
 }
