@@ -157,8 +157,6 @@ class DHCPRenewalService(
         val commands = when (platform) {
             "windows" -> listOf(
                 // Using ipconfig command to renew the lease
-                listOf("ipconfig", "/release"),
-                listOf("ipconfig", "/release6"),
                 listOf("ipconfig", "/renew"),
                 listOf("ipconfig", "/renew6")
             )
